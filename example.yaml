@@ -1,0 +1,23 @@
+domain: example.com
+records:
+  - name: ""
+    type: A
+    target: 93.184.216.34
+    ttl: 3600
+  - name: www
+    type: CNAME
+    target: example.com.
+    ttl: 3600
+  - name: mail
+    type: MX
+    target: mail.example.com.
+    priority: 10
+    ttl: 3600
+  - name: _dmarc
+    type: TXT
+    target: "v=DMARC1; p=none; rua=mailto:dmarc@example.com"
+    ttl: 3600
+  - name: ftp
+    type: A
+    target: 93.184.216.34
+    ttl: 7200

@@ -1,0 +1,32 @@
+# Credentials
+ovh-credentials.yaml
+*.credentials.yaml
+
+# DNS config files (optional - uncomment if you don't want to track them)
+# *.yaml
+# !*.example.yaml
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+ovh-dns-manager
+
+# Test binary
+*.test
+*.out
+
+# Go workspace file
+go.work
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
