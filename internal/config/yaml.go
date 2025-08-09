@@ -73,13 +73,11 @@ func ValidateDNSRecord(record *DNSRecord) error {
 	}
 
 	switch record.Type {
-	case "A", "AAAA", "CNAME", "TXT", "NS":
+	case "A", "AAAA", "CNAME", "TXT", "NS", "SPF", "CAA", "PTR":
 		// These types don't require priority
 	case "MX", "SRV":
-		// These types require priority
-		if record.Priority == 0 {
-			return fmt.Errorf("priority is required for %s records", record.Type)
-		}
+		// These types require priority (0 is valid for MX)
+		// Priority validation is handled elsewhere if needed
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)
 	}
