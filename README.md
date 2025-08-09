@@ -20,6 +20,7 @@ go build -o ovh-dns-manager ./main.go
 ```bash
 docker build -t ovh-dns-manager .
 ```
+*Creates a minimal ~5-8MB scratch-based container*
 
 ## Configuration
 
@@ -87,16 +88,16 @@ ovh-dns-manager apply --config config.yaml --credentials /path/to/creds.yaml
 
 ### Export
 ```bash
-podman run --rm -v $(pwd):/app/data ovh-dns-manager \
-    export --domain example.com --output /app/data/config.yaml \
-    --credentials /app/data/ovh-credentials.yaml
+podman run --rm -v $(pwd):/data:Z ovh-dns-manager \
+    export --domain example.com --output /data/config.yaml \
+    --credentials /data/ovh-credentials.yaml
 ```
 
 ### Apply
 ```bash
-podman run --rm -v $(pwd):/app/data ovh-dns-manager \
-    apply --config /app/data/config.yaml \
-    --credentials /app/data/ovh-credentials.yaml
+podman run --rm -v $(pwd):/data:Z ovh-dns-manager \
+    apply --config /data/config.yaml \
+    --credentials /data/ovh-credentials.yaml
 ```
 
 ## Supported DNS Record Types

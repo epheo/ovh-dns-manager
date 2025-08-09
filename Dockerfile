@@ -9,23 +9,14 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags='-w -s -extldflags "-static"' \
-    -a -installsuffix cgo \
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags='-w -s' \
     -o ovh-dns-manager \
     ./main.go
 
-FROM alpine:latest
+FROM scratch
 
-RUN apk --no-cache add ca-certificates tzdata && \
-    adduser -D -s /bin/sh appuser
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /app/ovh-dns-manager /ovh-dns-manager
 
-WORKDIR /app
-
-COPY --from=builder /app/ovh-dns-manager .
-
-RUN chown appuser:appuser ovh-dns-manager
-
-USER appuser
-
-ENTRYPOINT ["./ovh-dns-manager"]
+ENTRYPOINT ["/ovh-dns-manager"]
