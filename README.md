@@ -1,7 +1,6 @@
 # OVH DNS Manager
 
 A simple and lightweight tool to manage OVH DNS zones via YAML configuration files. 
-Designed to run as a one-shot operation in Alpine containers with minimal memory footprint.
 
 ## Features
 
@@ -105,18 +104,17 @@ podman run --rm -v $(pwd):/app/data ovh-dns-manager \
 - **A** - IPv4 address
 - **AAAA** - IPv6 address  
 - **CNAME** - Canonical name
-- **MX** - Mail exchanger (requires priority)
+- **MX** - Mail exchanger (priority 0+ allowed)
 - **TXT** - Text record
 - **NS** - Name server
 - **SRV** - Service record (requires priority)
+- **SPF** - Sender Policy Framework
+- **CAA** - Certificate Authority Authorization
+- **PTR** - Pointer record
 
 ## Memory Usage
 
-Typical memory usage:
-- **Binary size**: ~15MB (Alpine container)
-- **Runtime memory**: <20MB RAM
-- **Export operation**: ~5-10MB additional per 1000 records
-- **Apply operation**: ~3-5MB additional per 1000 records
+ ~16 MB peak (seems stable regardless of records count <100)
 
 ## Workflow
 
