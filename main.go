@@ -40,21 +40,44 @@ var applyCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&credentialsFile, "credentials", "c", "ovh-credentials.yaml", "OVH credentials file")
+	// Check for environment variable overrides
+	defaultCredentialsFile := "ovh-credentials.yaml"
+	if envCredFile := os.Getenv("OVH_CREDENTIALS_PATH"); envCredFile != "" {
+		defaultCredentialsFile = envCredFile
+	}
+	
+	rootCmd.PersistentFlags().StringVarP(&credentialsFile, "credentials", "c", defaultCredentialsFile, "OVH credentials file")
 	
 	exportCmd.Flags().StringVarP(&domain, "domain", "d", "", "Domain to export (required)")
 	exportCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output YAML file (default: {domain}.yaml)")
-	exportCmd.MarkFlagRequired("domain")
+	
+	// Make domain flag not required if OVH_DOMAIN env var is set
+	if os.Getenv("OVH_DOMAIN") == "" {
+		exportCmd.MarkFlagRequired("domain")
+	}
 
 	applyCmd.Flags().StringVarP(&configFile, "config", "f", "", "DNS configuration YAML file (required)")
 	applyCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show changes without applying them")
-	applyCmd.MarkFlagRequired("config")
+	
+	// Make config flag not required if OVH_CONFIG_PATH env var is set
+	if os.Getenv("OVH_CONFIG_PATH") == "" {
+		applyCmd.MarkFlagRequired("config")
+	}
 
 	rootCmd.AddCommand(exportCmd)
 	rootCmd.AddCommand(applyCmd)
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
+	// Use environment variable if domain flag is not provided
+	if domain == "" {
+		if envDomain := os.Getenv("OVH_DOMAIN"); envDomain != "" {
+			domain = envDomain
+		} else {
+			return fmt.Errorf("domain is required (use --domain flag or set OVH_DOMAIN environment variable)")
+		}
+	}
+
 	creds, err := config.LoadOVHCredentials(credentialsFile)
 	if err != nil {
 		return fmt.Errorf("failed to load credentials: %w", err)
@@ -84,6 +107,15 @@ func runExport(cmd *cobra.Command, args []string) error {
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
+	// Use environment variable if config flag is not provided
+	if configFile == "" {
+		if envConfigFile := os.Getenv("OVH_CONFIG_PATH"); envConfigFile != "" {
+			configFile = envConfigFile
+		} else {
+			return fmt.Errorf("config file is required (use --config flag or set OVH_CONFIG_PATH environment variable)")
+		}
+	}
+
 	zone, err := config.LoadDNSZone(configFile)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)

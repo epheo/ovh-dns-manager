@@ -25,6 +25,19 @@ docker build -t ovh-dns-manager .
 ## Configuration
 
 ### OVH Credentials
+
+You can configure OVH credentials using either **environment variables** (recommended for containers) or **YAML files**.
+
+#### Environment Variables (Recommended for Docker/Podman)
+```bash
+export OVH_ENDPOINT=ovh-eu                    # ovh-eu, ovh-ca, ovh-us
+export OVH_APPLICATION_KEY=your_application_key
+export OVH_APPLICATION_SECRET=your_application_secret  
+export OVH_CONSUMER_KEY=your_consumer_key
+export OVH_TIMEOUT=30                         # seconds (optional, defaults to 30)
+```
+
+#### YAML File
 Create `ovh-credentials.yaml`:
 ```yaml
 endpoint: ovh-eu  # ovh-eu, ovh-ca, ovh-us
@@ -33,6 +46,8 @@ application_secret: your_application_secret
 consumer_key: your_consumer_key
 timeout: 30  # seconds
 ```
+
+**Configuration precedence:** Environment variables → YAML file → defaults
 
 To obtain credentials:
 1. Go to [OVH API Console](https://eu.api.ovh.com/createToken/)
@@ -84,23 +99,55 @@ ovh-dns-manager apply --config config.yaml
 ovh-dns-manager apply --config config.yaml --credentials /path/to/creds.yaml
 ```
 
+### Using Environment Variables
+```bash
+# Export using environment variables
+export OVH_APPLICATION_KEY=your_key
+export OVH_APPLICATION_SECRET=your_secret
+export OVH_CONSUMER_KEY=your_consumer_key
+export OVH_DOMAIN=example.com
+ovh-dns-manager export
+
+# Apply using environment variables
+export OVH_CONFIG_PATH=/path/to/config.yaml
+ovh-dns-manager apply --dry-run
+```
+
 ## Docker Usage
 
-### Export
+### Using Environment Variables (Recommended)
 ```bash
+# Export
+podman run --rm -v $(pwd):/data:Z \
+    -e OVH_APPLICATION_KEY=your_key \
+    -e OVH_APPLICATION_SECRET=your_secret \
+    -e OVH_CONSUMER_KEY=your_consumer_key \
+    -e OVH_DOMAIN=example.com \
+    ghcr.io/epheo/ovh-dns-manager export --output /data/config.yaml
+
+# Apply
+podman run --rm -v $(pwd):/data:Z \
+    -e OVH_APPLICATION_KEY=your_key \
+    -e OVH_APPLICATION_SECRET=your_secret \
+    -e OVH_CONSUMER_KEY=your_consumer_key \
+    -e OVH_CONFIG_PATH=/data/config.yaml \
+    ghcr.io/epheo/ovh-dns-manager apply --dry-run
+```
+
+### Using Credential Files (Traditional)
+```bash
+# Export
 podman run --rm -v $(pwd):/data:Z ghcr.io/epheo/ovh-dns-manager \
     export --domain example.com --output /data/config.yaml \
     --credentials /data/ovh-credentials.yaml
-```
 
-### Apply
-```bash
+# Apply
 podman run --rm -v $(pwd):/data:Z ghcr.io/epheo/ovh-dns-manager \
     apply --config /data/config.yaml \
     --credentials /data/ovh-credentials.yaml
 ```
 
-Or build locally:
+### Build Locally
 ```bash
 podman build -t ovh-dns-manager .
 podman run --rm -v $(pwd):/data:Z ovh-dns-manager [commands...]
@@ -123,11 +170,29 @@ podman run --rm -v $(pwd):/data:Z ovh-dns-manager [commands...]
 
  ~16 MB peak (seems stable regardless of records count <100)
 
+## Environment Variables Reference
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `OVH_ENDPOINT` | OVH API endpoint (ovh-eu, ovh-ca, ovh-us) | `ovh-eu` | No |
+| `OVH_APPLICATION_KEY` | OVH API application key | - | Yes* |
+| `OVH_APPLICATION_SECRET` | OVH API application secret | - | Yes* |
+| `OVH_CONSUMER_KEY` | OVH API consumer key | - | Yes* |
+| `OVH_TIMEOUT` | API timeout in seconds | `30` | No |
+| `OVH_DOMAIN` | Domain name (for export command) | - | No |
+| `OVH_CONFIG_PATH` | Path to DNS config YAML file | - | No |
+| `OVH_CREDENTIALS_PATH` | Path to credentials YAML file | `ovh-credentials.yaml` | No |
+
+*Required unless provided in YAML file
+
 ## Workflow
 
 1. **One-time setup**: Export existing DNS configuration
    ```bash
    ovh-dns-manager export --domain example.com
+   # Or with env vars:
+   export OVH_DOMAIN=example.com
+   ovh-dns-manager export
    ```
 
 2. **Edit YAML file** with desired DNS records
@@ -135,6 +200,9 @@ podman run --rm -v $(pwd):/data:Z ovh-dns-manager [commands...]
 3. **Preview changes** with dry-run
    ```bash
    ovh-dns-manager apply --config example.com.yaml --dry-run
+   # Or with env vars:
+   export OVH_CONFIG_PATH=example.com.yaml
+   ovh-dns-manager apply --dry-run
    ```
 
 4. **Apply changes** 
