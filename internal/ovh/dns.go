@@ -4,34 +4,44 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
+	"net/http"
 
 	"ovh-dns-manager/internal/config"
 )
+
+// readJSONResponse is a helper function to read and unmarshal JSON responses
+func readJSONResponse(resp *http.Response, v interface{}) error {
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+	
+	if err := json.Unmarshal(body, v); err != nil {
+		return fmt.Errorf("failed to parse JSON response: %w", err)
+	}
+	
+	return nil
+}
 
 func (c *Client) GetZoneRecords(zoneName string) ([]config.OVHRecord, error) {
 	path := fmt.Sprintf("/domain/zone/%s/record", zoneName)
 	resp, err := c.doRequest("GET", path, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get zone records: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, err
 	}
 
 	var recordIDs []int64
-	if err := json.Unmarshal(body, &recordIDs); err != nil {
-		return nil, fmt.Errorf("failed to parse record IDs: %w", err)
+	if err := readJSONResponse(resp, &recordIDs); err != nil {
+		return nil, err
 	}
 
 	var records []config.OVHRecord
 	for _, id := range recordIDs {
 		record, err := c.GetRecord(zoneName, id)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get record %d: %w", id, err)
+			return nil, err
 		}
 		records = append(records, *record)
 	}
@@ -43,18 +53,12 @@ func (c *Client) GetRecord(zoneName string, recordID int64) (*config.OVHRecord, 
 	path := fmt.Sprintf("/domain/zone/%s/record/%d", zoneName, recordID)
 	resp, err := c.doRequest("GET", path, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get record: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, err
 	}
 
 	var record config.OVHRecord
-	if err := json.Unmarshal(body, &record); err != nil {
-		return nil, fmt.Errorf("failed to parse record: %w", err)
+	if err := readJSONResponse(resp, &record); err != nil {
+		return nil, err
 	}
 
 	return &record, nil
@@ -65,23 +69,17 @@ func (c *Client) CreateRecord(zoneName string, record *config.OVHRecordCreate) (
 	
 	body, err := json.Marshal(record)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal record: %w", err)
+		return nil, err
 	}
 
 	resp, err := c.doRequest("POST", path, string(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create record: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, err
 	}
 
 	var createdRecord config.OVHRecord
-	if err := json.Unmarshal(respBody, &createdRecord); err != nil {
-		return nil, fmt.Errorf("failed to parse created record: %w", err)
+	if err := readJSONResponse(resp, &createdRecord); err != nil {
+		return nil, err
 	}
 
 	return &createdRecord, nil
@@ -92,12 +90,12 @@ func (c *Client) UpdateRecord(zoneName string, recordID int64, record *config.OV
 	
 	body, err := json.Marshal(record)
 	if err != nil {
-		return fmt.Errorf("failed to marshal record: %w", err)
+		return err
 	}
 
 	resp, err := c.doRequest("PUT", path, string(body))
 	if err != nil {
-		return fmt.Errorf("failed to update record: %w", err)
+		return err
 	}
 	resp.Body.Close()
 
@@ -109,7 +107,7 @@ func (c *Client) DeleteRecord(zoneName string, recordID int64) error {
 	
 	resp, err := c.doRequest("DELETE", path, "")
 	if err != nil {
-		return fmt.Errorf("failed to delete record: %w", err)
+		return err
 	}
 	resp.Body.Close()
 
@@ -121,32 +119,11 @@ func (c *Client) RefreshZone(zoneName string) error {
 	
 	resp, err := c.doRequest("POST", path, "")
 	if err != nil {
-		return fmt.Errorf("failed to refresh zone: %w", err)
+		return err
 	}
 	resp.Body.Close()
 
 	return nil
-}
-
-func (c *Client) GetZones() ([]string, error) {
-	path := "/domain/zone"
-	resp, err := c.doRequest("GET", path, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get zones: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var zones []string
-	if err := json.Unmarshal(body, &zones); err != nil {
-		return nil, fmt.Errorf("failed to parse zones: %w", err)
-	}
-
-	return zones, nil
 }
 
 func ConvertOVHRecordToDNSRecord(ovhRecord *config.OVHRecord) *config.DNSRecord {
@@ -164,40 +141,40 @@ func ConvertOVHRecordToDNSRecord(ovhRecord *config.OVHRecord) *config.DNSRecord 
 	return record
 }
 
+// setRecordDefaults applies default TTL and priority handling
+func setRecordDefaults(ttl int, priority int) (int, *int) {
+	if ttl == 0 {
+		ttl = config.DefaultTTL
+	}
+	
+	var priorityPtr *int
+	if priority >= 0 {
+		priorityPtr = &priority
+	}
+	
+	return ttl, priorityPtr
+}
+
 func ConvertDNSRecordToOVHCreate(dnsRecord *config.DNSRecord) *config.OVHRecordCreate {
-	record := &config.OVHRecordCreate{
+	ttl, priority := setRecordDefaults(dnsRecord.TTL, dnsRecord.Priority)
+	
+	return &config.OVHRecordCreate{
 		SubDomain: dnsRecord.Name,
 		FieldType: dnsRecord.Type,
 		Target:    dnsRecord.Target,
-		TTL:       dnsRecord.TTL,
+		TTL:       ttl,
+		Priority:  priority,
 	}
-
-	if dnsRecord.Priority > 0 {
-		record.Priority = &dnsRecord.Priority
-	}
-
-	if record.TTL == 0 {
-		record.TTL = 3600
-	}
-
-	return record
 }
 
 func ConvertDNSRecordToOVHUpdate(dnsRecord *config.DNSRecord) *config.OVHRecordUpdate {
-	record := &config.OVHRecordUpdate{
-		Target: dnsRecord.Target,
-		TTL:    dnsRecord.TTL,
+	ttl, priority := setRecordDefaults(dnsRecord.TTL, dnsRecord.Priority)
+	
+	return &config.OVHRecordUpdate{
+		Target:   dnsRecord.Target,
+		TTL:      ttl,
+		Priority: priority,
 	}
-
-	if dnsRecord.Priority > 0 {
-		record.Priority = &dnsRecord.Priority
-	}
-
-	if record.TTL == 0 {
-		record.TTL = 3600
-	}
-
-	return record
 }
 
 func RecordsEqual(a, b *config.DNSRecord) bool {
@@ -208,15 +185,6 @@ func RecordsEqual(a, b *config.DNSRecord) bool {
 		a.Priority == b.Priority
 }
 
-func FindRecordByKey(records []config.DNSRecord, name, recordType string) *config.DNSRecord {
-	for _, record := range records {
-		if record.Name == name && record.Type == recordType {
-			return &record
-		}
-	}
-	return nil
-}
-
 func RecordKey(record *config.DNSRecord) string {
 	return record.Name + ":" + record.Type
 }
@@ -225,6 +193,3 @@ func OVHRecordKey(record *config.OVHRecord) string {
 	return record.SubDomain + ":" + record.FieldType
 }
 
-func RecordKeyWithID(record *config.OVHRecord) string {
-	return record.SubDomain + ":" + record.FieldType + ":" + strconv.FormatInt(record.ID, 10)
-}

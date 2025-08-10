@@ -8,6 +8,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// DNS record defaults and limits
+	DefaultTTL = 3600  // Default TTL in seconds (1 hour)
+	MaxTTL     = 2147483647 // Maximum TTL value (2^31-1)
+)
+
 func LoadDNSZone(filename string) (*DNSZone, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -17,6 +23,13 @@ func LoadDNSZone(filename string) (*DNSZone, error) {
 	var zone DNSZone
 	if err := yaml.Unmarshal(data, &zone); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	// Validate all DNS records during loading
+	for i := range zone.Records {
+		if err := ValidateDNSRecord(&zone.Records[i]); err != nil {
+			return nil, fmt.Errorf("invalid DNS record %d: %w", i, err)
+		}
 	}
 
 	return &zone, nil
@@ -56,33 +69,29 @@ func LoadOVHCredentials(filename string) (*OVHCredentials, error) {
 
 		data, err := os.ReadFile(filename)
 		if err != nil {
-			if hasEnvCreds {
-				// If we have some env vars but file failed, continue with env vars only
-			} else {
-				return nil, fmt.Errorf("failed to read credentials file %s and no environment variables set: %w", filename, err)
-			}
-		} else {
-			var fileCreds OVHCredentials
-			if err := yaml.Unmarshal(data, &fileCreds); err != nil {
-				return nil, fmt.Errorf("failed to parse credentials YAML: %w", err)
-			}
-			
-			// Use file values only if env vars are not set
-			if creds.Endpoint == "" {
-				creds.Endpoint = fileCreds.Endpoint
-			}
-			if creds.ApplicationKey == "" {
-				creds.ApplicationKey = fileCreds.ApplicationKey
-			}
-			if creds.ApplicationSecret == "" {
-				creds.ApplicationSecret = fileCreds.ApplicationSecret
-			}
-			if creds.ConsumerKey == "" {
-				creds.ConsumerKey = fileCreds.ConsumerKey
-			}
-			if creds.Timeout == 0 {
-				creds.Timeout = fileCreds.Timeout
-			}
+			return nil, fmt.Errorf("failed to read credentials file %s and no environment variables set: %w", filename, err)
+		}
+		
+		var fileCreds OVHCredentials
+		if err := yaml.Unmarshal(data, &fileCreds); err != nil {
+			return nil, fmt.Errorf("failed to parse credentials YAML: %w", err)
+		}
+		
+		// Use file values only if env vars are not set
+		if creds.Endpoint == "" {
+			creds.Endpoint = fileCreds.Endpoint
+		}
+		if creds.ApplicationKey == "" {
+			creds.ApplicationKey = fileCreds.ApplicationKey
+		}
+		if creds.ApplicationSecret == "" {
+			creds.ApplicationSecret = fileCreds.ApplicationSecret
+		}
+		if creds.ConsumerKey == "" {
+			creds.ConsumerKey = fileCreds.ConsumerKey
+		}
+		if creds.Timeout == 0 {
+			creds.Timeout = fileCreds.Timeout
 		}
 	}
 
@@ -109,10 +118,9 @@ func LoadOVHCredentials(filename string) (*OVHCredentials, error) {
 }
 
 func ValidateDNSRecord(record *DNSRecord) error {
-	if record.Name == "" && record.Type != "A" && record.Type != "AAAA" && record.Type != "MX" && record.Type != "TXT" {
-		// Allow empty name only for root domain records
-	}
-
+	// Empty name is allowed for root domain (@) records
+	// All record types can have empty names for root domain
+	
 	if record.Type == "" {
 		return fmt.Errorf("record type is required")
 	}
@@ -124,15 +132,23 @@ func ValidateDNSRecord(record *DNSRecord) error {
 	switch record.Type {
 	case "A", "AAAA", "CNAME", "TXT", "NS", "SPF", "CAA", "PTR":
 		// These types don't require priority
+		if record.Priority != 0 {
+			return fmt.Errorf("record type %s should not have priority set", record.Type)
+		}
 	case "MX", "SRV":
 		// These types require priority (0 is valid for MX)
-		// Priority validation is handled elsewhere if needed
+		// Priority validation is implicit - any int value is valid
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)
 	}
 
 	if record.TTL < 0 {
 		return fmt.Errorf("TTL cannot be negative")
+	}
+
+	// Basic TTL range validation (typical DNS values)
+	if record.TTL > MaxTTL {
+		return fmt.Errorf("TTL too large (max: %d)", MaxTTL)
 	}
 
 	return nil
@@ -155,3 +171,12 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 	}
 	return defaultValue
 }
+
+// LoadAppConfig loads application configuration from environment variables with fallbacks
+func LoadAppConfig() (credentialsPath, domain, configPath string) {
+	credentialsPath = getEnvOrDefault("OVH_CREDENTIALS_PATH", "ovh-credentials.yaml")
+	domain = getEnvOrDefault("OVH_DOMAIN", "")
+	configPath = getEnvOrDefault("OVH_CONFIG_PATH", "")
+	return
+}
+

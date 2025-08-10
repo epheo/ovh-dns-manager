@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/spf13/cobra"
 	"ovh-dns-manager/internal/config"
@@ -18,6 +17,27 @@ var (
 	outputFile      string
 	dryRun          bool
 )
+
+// setupOVHClient loads credentials and creates OVH client
+func setupOVHClient(credentialsFile string) (*ovh.Client, error) {
+	creds, err := config.LoadOVHCredentials(credentialsFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return ovh.NewClient(creds)
+}
+
+// resolveValueWithEnvFallback resolves a flag value with environment variable fallback
+func resolveValueWithEnvFallback(flagValue, envValue, flagName, envVarName string) (string, error) {
+	if flagValue == "" {
+		if envValue != "" {
+			return envValue, nil
+		}
+		return "", fmt.Errorf("%s is required (use --%s flag or set %s environment variable)", flagName, flagName, envVarName)
+	}
+	return flagValue, nil
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "ovh-dns-manager",
@@ -40,19 +60,15 @@ var applyCmd = &cobra.Command{
 }
 
 func init() {
-	// Check for environment variable overrides
-	defaultCredentialsFile := "ovh-credentials.yaml"
-	if envCredFile := os.Getenv("OVH_CREDENTIALS_PATH"); envCredFile != "" {
-		defaultCredentialsFile = envCredFile
-	}
+	credentialsPath, envDomain, configPath := config.LoadAppConfig()
 	
-	rootCmd.PersistentFlags().StringVarP(&credentialsFile, "credentials", "c", defaultCredentialsFile, "OVH credentials file")
+	rootCmd.PersistentFlags().StringVarP(&credentialsFile, "credentials", "c", credentialsPath, "OVH credentials file")
 	
 	exportCmd.Flags().StringVarP(&domain, "domain", "d", "", "Domain to export (required)")
 	exportCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output YAML file (default: {domain}.yaml)")
 	
 	// Make domain flag not required if OVH_DOMAIN env var is set
-	if os.Getenv("OVH_DOMAIN") == "" {
+	if envDomain == "" {
 		exportCmd.MarkFlagRequired("domain")
 	}
 
@@ -60,7 +76,7 @@ func init() {
 	applyCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show changes without applying them")
 	
 	// Make config flag not required if OVH_CONFIG_PATH env var is set
-	if os.Getenv("OVH_CONFIG_PATH") == "" {
+	if configPath == "" {
 		applyCmd.MarkFlagRequired("config")
 	}
 
@@ -69,29 +85,23 @@ func init() {
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
-	// Use environment variable if domain flag is not provided
-	if domain == "" {
-		if envDomain := os.Getenv("OVH_DOMAIN"); envDomain != "" {
-			domain = envDomain
-		} else {
-			return fmt.Errorf("domain is required (use --domain flag or set OVH_DOMAIN environment variable)")
-		}
+	_, envDomain, _ := config.LoadAppConfig()
+	
+	var err error
+	domain, err = resolveValueWithEnvFallback(domain, envDomain, "domain", "OVH_DOMAIN")
+	if err != nil {
+		return err
 	}
 
-	creds, err := config.LoadOVHCredentials(credentialsFile)
+	client, err := setupOVHClient(credentialsFile)
 	if err != nil {
-		return fmt.Errorf("failed to load credentials: %w", err)
-	}
-
-	client, err := ovh.NewClient(creds)
-	if err != nil {
-		return fmt.Errorf("failed to create OVH client: %w", err)
+		return err
 	}
 
 	syncer := sync.NewSyncer(client, false)
 	zone, err := syncer.ExportZone(domain)
 	if err != nil {
-		return fmt.Errorf("failed to export zone: %w", err)
+		return err
 	}
 
 	if outputFile == "" {
@@ -99,7 +109,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := config.SaveDNSZone(zone, outputFile); err != nil {
-		return fmt.Errorf("failed to save configuration: %w", err)
+		return err
 	}
 
 	log.Printf("Exported %d DNS records for domain %s to %s", len(zone.Records), domain, outputFile)
@@ -107,40 +117,28 @@ func runExport(cmd *cobra.Command, args []string) error {
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
-	// Use environment variable if config flag is not provided
-	if configFile == "" {
-		if envConfigFile := os.Getenv("OVH_CONFIG_PATH"); envConfigFile != "" {
-			configFile = envConfigFile
-		} else {
-			return fmt.Errorf("config file is required (use --config flag or set OVH_CONFIG_PATH environment variable)")
-		}
+	_, _, envConfigPath := config.LoadAppConfig()
+	
+	var err error
+	configFile, err = resolveValueWithEnvFallback(configFile, envConfigPath, "config", "OVH_CONFIG_PATH")
+	if err != nil {
+		return err
 	}
 
 	zone, err := config.LoadDNSZone(configFile)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
+		return err
 	}
 
-	for i := range zone.Records {
-		if err := config.ValidateDNSRecord(&zone.Records[i]); err != nil {
-			return fmt.Errorf("invalid DNS record %d: %w", i, err)
-		}
-	}
-
-	creds, err := config.LoadOVHCredentials(credentialsFile)
+	client, err := setupOVHClient(credentialsFile)
 	if err != nil {
-		return fmt.Errorf("failed to load credentials: %w", err)
-	}
-
-	client, err := ovh.NewClient(creds)
-	if err != nil {
-		return fmt.Errorf("failed to create OVH client: %w", err)
+		return err
 	}
 
 	syncer := sync.NewSyncer(client, dryRun)
 	result, err := syncer.SyncZone(zone)
 	if err != nil {
-		return fmt.Errorf("failed to sync zone: %w", err)
+		return err
 	}
 
 	result.PrintSummary()
@@ -161,6 +159,5 @@ func runApply(cmd *cobra.Command, args []string) error {
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
-		os.Exit(1)
 	}
 }

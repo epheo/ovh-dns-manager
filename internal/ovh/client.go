@@ -3,6 +3,7 @@ package ovh
 import (
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -40,16 +41,6 @@ func NewClient(creds *config.OVHCredentials) (*Client, error) {
 		}
 	}
 
-	if creds.ApplicationKey == "" {
-		return nil, fmt.Errorf("application key is required")
-	}
-	if creds.ApplicationSecret == "" {
-		return nil, fmt.Errorf("application secret is required")
-	}
-	if creds.ConsumerKey == "" {
-		return nil, fmt.Errorf("consumer key is required")
-	}
-
 	timeout := time.Duration(creds.Timeout) * time.Second
 	if creds.Timeout == 0 {
 		timeout = 30 * time.Second
@@ -66,6 +57,8 @@ func NewClient(creds *config.OVHCredentials) (*Client, error) {
 	}, nil
 }
 
+// generateSignature creates the OVH API signature using SHA1
+// Note: SHA1 usage is required by the OVH API specification and cannot be changed
 func (c *Client) generateSignature(method, url, body string, timestamp int64) string {
 	h := sha1.New()
 	h.Write([]byte(fmt.Sprintf("%s+%s+%s+%s+%s+%d",
@@ -110,6 +103,11 @@ func (c *Client) doRequest(method, path, body string) (*http.Response, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Try to read the response body for more detailed error information
+		defer resp.Body.Close()
+		if respBody, readErr := io.ReadAll(resp.Body); readErr == nil && len(respBody) > 0 {
+			return resp, fmt.Errorf("API error: %s - %s", resp.Status, string(respBody))
+		}
 		return resp, fmt.Errorf("API error: %s", resp.Status)
 	}
 

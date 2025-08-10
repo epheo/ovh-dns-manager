@@ -3,7 +3,6 @@ package sync
 import (
 	"fmt"
 	"log"
-	"strconv"
 
 	"ovh-dns-manager/internal/config"
 	"ovh-dns-manager/internal/ovh"
@@ -29,16 +28,11 @@ func NewSyncer(client *ovh.Client, dryRun bool) *Syncer {
 }
 
 func (s *Syncer) SyncZone(zone *config.DNSZone) (*SyncResult, error) {
-	result := &SyncResult{
-		Created: []config.DNSRecord{},
-		Updated: []config.DNSRecord{},
-		Deleted: []config.OVHRecord{},
-		Errors:  []error{},
-	}
+	result := &SyncResult{}
 
 	currentRecords, err := s.client.GetZoneRecords(zone.Domain)
 	if err != nil {
-		return result, fmt.Errorf("failed to get current records: %w", err)
+		return result, err
 	}
 
 	desiredRecords := make(map[string]*config.DNSRecord)
@@ -97,10 +91,10 @@ func (s *Syncer) SyncZone(zone *config.DNSZone) (*SyncResult, error) {
 		}
 	}
 
-	if len(result.Created)+len(result.Updated)+len(result.Deleted) > 0 && !s.dryRun {
+	if result.HasChanges() && !s.dryRun {
 		log.Printf("Refreshing DNS zone %s", zone.Domain)
 		if err := s.client.RefreshZone(zone.Domain); err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("failed to refresh zone: %w", err))
+			result.Errors = append(result.Errors, err)
 		}
 	}
 
@@ -110,7 +104,7 @@ func (s *Syncer) SyncZone(zone *config.DNSZone) (*SyncResult, error) {
 func (s *Syncer) ExportZone(domain string) (*config.DNSZone, error) {
 	records, err := s.client.GetZoneRecords(domain)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get zone records: %w", err)
+		return nil, err
 	}
 
 	zone := &config.DNSZone{
@@ -151,18 +145,3 @@ func (r *SyncResult) PrintSummary() {
 	}
 }
 
-func RecordIdentifier(record *config.DNSRecord) string {
-	id := record.Name + ":" + record.Type
-	if record.Priority > 0 {
-		id += ":" + strconv.Itoa(record.Priority)
-	}
-	return id
-}
-
-func OVHRecordIdentifier(record *config.OVHRecord) string {
-	id := record.SubDomain + ":" + record.FieldType
-	if record.Priority != nil && *record.Priority > 0 {
-		id += ":" + strconv.Itoa(*record.Priority)
-	}
-	return id
-}
