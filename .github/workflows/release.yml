@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  BINARY_NAME: ovh-dns-manager
+
+jobs:
+  build-binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - goos: linux
+            goarch: amd64
+            suffix: ""
+          - goos: linux
+            goarch: arm64
+            suffix: ""
+          # macOS
+          - goos: darwin
+            goarch: amd64
+            suffix: ""
+          - goos: darwin
+            goarch: arm64
+            suffix: ""
+          # Windows
+          - goos: windows
+            goarch: amd64
+            suffix: ".exe"
+          - goos: windows
+            goarch: arm64
+            suffix: ".exe"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -ldflags="-w -s -X main.version=${{ steps.get_version.outputs.VERSION }}" \
+            -o dist/${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} \
+            ./main.go
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum ${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }} > ${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}.sha256
+
+      - name: Upload binaries as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: dist/
+
+  create-release:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "VERSION_NO_V=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries
+          path: dist/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          # Generate changelog content
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG_CONTENT="## Changes since $PREVIOUS_TAG"$'\n'$'\n'$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..HEAD)
+          else
+            CHANGELOG_CONTENT="## Initial Release"$'\n'$'\n'"First release of OVH DNS Manager"
+          fi
+          
+          # Set output using proper escaping
+          {
+            echo "CHANGELOG<<EOF"
+            echo "$CHANGELOG_CONTENT"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            # OVH DNS Manager ${{ steps.get_version.outputs.VERSION }}
+            
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ## Installation
+            
+            ### Binary Installation
+            Download the appropriate binary for your platform from the assets below.
+            
+            ### Container Image
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.VERSION_NO_V }}
+            ```
+            
+            ## Checksums
+            All binaries include SHA256 checksums for verification.
+            
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

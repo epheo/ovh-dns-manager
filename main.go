@@ -16,6 +16,7 @@ var (
 	domain          string
 	outputFile      string
 	dryRun          bool
+	version         string = "dev"
 )
 
 // setupOVHClient loads credentials and creates OVH client
@@ -40,9 +41,10 @@ func resolveValueWithEnvFallback(flagValue, envValue, flagName, envVarName strin
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "ovh-dns-manager",
-	Short: "Manage OVH DNS zones via YAML configuration",
-	Long:  "A tool to export and apply DNS zone configurations to OVH using YAML files",
+	Use:     "ovh-dns-manager",
+	Short:   "Manage OVH DNS zones via YAML configuration",
+	Long:    "A tool to export and apply DNS zone configurations to OVH using YAML files",
+	Version: version,
 }
 
 var exportCmd = &cobra.Command{
