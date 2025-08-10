@@ -88,16 +88,22 @@ ovh-dns-manager apply --config config.yaml --credentials /path/to/creds.yaml
 
 ### Export
 ```bash
-podman run --rm -v $(pwd):/data:Z ovh-dns-manager \
+podman run --rm -v $(pwd):/data:Z ghcr.io/epheo/ovh-dns-manager \
     export --domain example.com --output /data/config.yaml \
     --credentials /data/ovh-credentials.yaml
 ```
 
 ### Apply
 ```bash
-podman run --rm -v $(pwd):/data:Z ovh-dns-manager \
+podman run --rm -v $(pwd):/data:Z ghcr.io/epheo/ovh-dns-manager \
     apply --config /data/config.yaml \
     --credentials /data/ovh-credentials.yaml
+```
+
+Or build locally:
+```bash
+podman build -t ovh-dns-manager .
+podman run --rm -v $(pwd):/data:Z ovh-dns-manager [commands...]
 ```
 
 ## Supported DNS Record Types
