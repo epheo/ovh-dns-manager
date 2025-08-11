@@ -16,9 +16,9 @@ A simple and lightweight tool to manage OVH DNS zones via YAML configuration fil
 go build -o ovh-dns-manager ./main.go
 ```
 
-### Docker
+### Container
 ```bash
-docker build -t ovh-dns-manager .
+podman build -t ovh-dns-manager .
 ```
 *Creates a minimal ~5-8MB scratch-based container*
 
@@ -113,7 +113,7 @@ export OVH_CONFIG_PATH=/path/to/config.yaml
 ovh-dns-manager apply --dry-run
 ```
 
-## Docker Usage
+## Container Usage
 
 ### Using Environment Variables (Recommended)
 ```bash
