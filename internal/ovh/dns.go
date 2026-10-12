@@ -178,12 +178,20 @@ func ConvertDNSRecordToOVHUpdate(dnsRecord *config.DNSRecord) *config.OVHRecordU
 	}
 }
 
-func RecordsEqual(a, b *config.DNSRecord) bool {
-	return a.Name == b.Name &&
-		a.Type == b.Type &&
-		a.Target == b.Target &&
-		a.TTL == b.TTL &&
-		a.Priority == b.Priority
+// RecordsEqual compares a desired record with a live one. An unset desired
+// TTL accepts 0 (zone default, records made in the OVH UI) and DefaultTTL
+// (what create and update send); comparing it literally rewrote every such
+// record on every run.
+func RecordsEqual(desired, current *config.DNSRecord) bool {
+	ttlOK := desired.TTL == current.TTL
+	if desired.TTL == 0 {
+		ttlOK = current.TTL == 0 || current.TTL == config.DefaultTTL
+	}
+	return desired.Name == current.Name &&
+		desired.Type == current.Type &&
+		desired.Target == current.Target &&
+		ttlOK &&
+		desired.Priority == current.Priority
 }
 
 func RecordKey(record *config.DNSRecord) string {
