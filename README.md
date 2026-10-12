@@ -93,6 +93,18 @@ An apex cannot be a CNAME, so it cannot follow a dynamic-DNS name the way subdom
 - If they disagree, return nothing, several addresses, or a private one, the live record is left untouched and apply exits non-zero.
 - Only valid on A records, and never together with `target`.
 
+### Records owned by another writer
+
+A record updated by something else, such as a router's DynHost, must not be reset to a literal:
+
+```yaml
+  - name: home
+    type: A
+    external: true   # never created, updated or deleted by apply
+```
+
+Leaving it out of the file is not the same: apply deletes records the file does not list.
+
 ## Usage
 
 ### Export existing DNS zone

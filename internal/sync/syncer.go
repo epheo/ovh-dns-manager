@@ -49,6 +49,9 @@ func (s *Syncer) SyncZone(zone *config.DNSZone) (*SyncResult, error) {
 
 	for key, desired := range desiredRecords {
 		// Still in desiredRecords, so the delete pass below keeps it too.
+		if desired.External {
+			continue
+		}
 		if desired.Unresolved {
 			log.Printf("Skipping record: %s %s, follow %s unresolved", desired.Name, desired.Type, desired.Follow)
 			continue
