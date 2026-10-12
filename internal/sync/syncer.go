@@ -35,68 +35,42 @@ func (s *Syncer) SyncZone(zone *config.DNSZone) (*SyncResult, error) {
 		return result, err
 	}
 
-	desiredRecords := make(map[string]*config.DNSRecord)
-	for i := range zone.Records {
-		key := ovh.RecordKey(&zone.Records[i])
-		desiredRecords[key] = &zone.Records[i]
+	plan := Plan(zone.Records, currentRecords)
+	for _, sk := range plan.Skipped {
+		log.Printf("Skipping %s: %s", sk.Key, sk.Reason)
 	}
 
-	currentRecordsMap := make(map[string]*config.OVHRecord)
-	for i := range currentRecords {
-		key := ovh.OVHRecordKey(&currentRecords[i])
-		currentRecordsMap[key] = &currentRecords[i]
+	for _, desired := range plan.Creates {
+		log.Printf("Creating record: %s %s -> %s", desired.Name, desired.Type, desired.Target)
+		if !s.dryRun {
+			if _, err := s.client.CreateRecord(zone.Domain, ovh.ConvertDNSRecordToOVHCreate(&desired)); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("failed to create record %s: %w", ovh.RecordKey(&desired), err))
+				continue
+			}
+		}
+		result.Created = append(result.Created, desired)
 	}
 
-	for key, desired := range desiredRecords {
-		// Still in desiredRecords, so the delete pass below keeps it too.
-		if desired.External {
-			continue
-		}
-		if desired.Unresolved {
-			log.Printf("Skipping record: %s %s, follow %s unresolved", desired.Name, desired.Type, desired.Follow)
-			continue
-		}
-		current, exists := currentRecordsMap[key]
-		if !exists {
-			log.Printf("Creating record: %s %s -> %s", desired.Name, desired.Type, desired.Target)
-			if !s.dryRun {
-				createRecord := ovh.ConvertDNSRecordToOVHCreate(desired)
-				_, err := s.client.CreateRecord(zone.Domain, createRecord)
-				if err != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("failed to create record %s: %w", key, err))
-					continue
-				}
-			}
-			result.Created = append(result.Created, *desired)
-		} else {
-			currentDNS := ovh.ConvertOVHRecordToDNSRecord(current)
-			if !ovh.RecordsEqual(desired, currentDNS) {
-				log.Printf("Updating record: %s %s -> %s (was %s)", desired.Name, desired.Type, desired.Target, currentDNS.Target)
-				if !s.dryRun {
-					updateRecord := ovh.ConvertDNSRecordToOVHUpdate(desired)
-					err := s.client.UpdateRecord(zone.Domain, current.ID, updateRecord)
-					if err != nil {
-						result.Errors = append(result.Errors, fmt.Errorf("failed to update record %s: %w", key, err))
-						continue
-					}
-				}
-				result.Updated = append(result.Updated, *desired)
+	for _, u := range plan.Updates {
+		log.Printf("Updating record: %s %s -> %s (was %s)", u.Desired.Name, u.Desired.Type, u.Desired.Target, u.Current.Target)
+		if !s.dryRun {
+			if err := s.client.UpdateRecord(zone.Domain, u.Current.ID, ovh.ConvertDNSRecordToOVHUpdate(&u.Desired)); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("failed to update record %s: %w", ovh.RecordKey(&u.Desired), err))
+				continue
 			}
 		}
+		result.Updated = append(result.Updated, u.Desired)
 	}
 
-	for key, current := range currentRecordsMap {
-		if _, exists := desiredRecords[key]; !exists {
-			log.Printf("Deleting record: %s %s -> %s (ID: %d)", current.SubDomain, current.FieldType, current.Target, current.ID)
-			if !s.dryRun {
-				err := s.client.DeleteRecord(zone.Domain, current.ID)
-				if err != nil {
-					result.Errors = append(result.Errors, fmt.Errorf("failed to delete record %s: %w", key, err))
-					continue
-				}
+	for _, current := range plan.Deletes {
+		log.Printf("Deleting record: %s %s -> %s (ID: %d)", current.SubDomain, current.FieldType, current.Target, current.ID)
+		if !s.dryRun {
+			if err := s.client.DeleteRecord(zone.Domain, current.ID); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("failed to delete record %s: %w", ovh.OVHRecordKey(&current), err))
+				continue
 			}
-			result.Deleted = append(result.Deleted, *current)
 		}
+		result.Deleted = append(result.Deleted, current)
 	}
 
 	if result.HasChanges() && !s.dryRun {
