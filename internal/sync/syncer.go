@@ -48,6 +48,11 @@ func (s *Syncer) SyncZone(zone *config.DNSZone) (*SyncResult, error) {
 	}
 
 	for key, desired := range desiredRecords {
+		// Still in desiredRecords, so the delete pass below keeps it too.
+		if desired.Unresolved {
+			log.Printf("Skipping record: %s %s, follow %s unresolved", desired.Name, desired.Type, desired.Follow)
+			continue
+		}
 		current, exists := currentRecordsMap[key]
 		if !exists {
 			log.Printf("Creating record: %s %s -> %s", desired.Name, desired.Type, desired.Target)

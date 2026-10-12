@@ -77,6 +77,22 @@ records:
     ttl: 3600
 ```
 
+### Following a dynamic address
+
+An apex cannot be a CNAME, so it cannot follow a dynamic-DNS name the way subdomains can.
+`follow` sets an A record to the current public IPv4 of another host at every apply:
+
+```yaml
+  - name: ""
+    type: A
+    follow: home.example.com   # instead of target
+    ttl: 300
+```
+
+- Resolved over DoH by Cloudflare and Google; both must return the same single public IPv4.
+- If they disagree, return nothing, several addresses, or a private one, the live record is left untouched and apply exits non-zero.
+- Only valid on A records, and never together with `target`.
+
 ## Usage
 
 ### Export existing DNS zone

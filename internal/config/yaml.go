@@ -125,7 +125,14 @@ func ValidateDNSRecord(record *DNSRecord) error {
 		return fmt.Errorf("record type is required")
 	}
 
-	if record.Target == "" {
+	if record.Follow != "" {
+		if record.Type != "A" {
+			return fmt.Errorf("follow is only supported on A records")
+		}
+		if record.Target != "" {
+			return fmt.Errorf("target and follow are mutually exclusive")
+		}
+	} else if record.Target == "" {
 		return fmt.Errorf("record target is required")
 	}
 

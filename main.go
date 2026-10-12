@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ovh-dns-manager/internal/config"
+	"ovh-dns-manager/internal/follow"
 	"ovh-dns-manager/internal/ovh"
 	"ovh-dns-manager/internal/sync"
 )
@@ -137,12 +138,18 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	followErrs := follow.ResolveZone(zone, follow.NewResolver())
+	for _, e := range followErrs {
+		log.Printf("follow: %v", e)
+	}
+
 	syncer := sync.NewSyncer(client, dryRun)
 	result, err := syncer.SyncZone(zone)
 	if err != nil {
 		return err
 	}
 
+	result.Errors = append(result.Errors, followErrs...)
 	result.PrintSummary()
 
 	if result.HasErrors() {

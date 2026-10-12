@@ -11,6 +11,12 @@ type DNSRecord struct {
 	Target   string `yaml:"target"`
 	TTL      int    `yaml:"ttl,omitempty"`
 	Priority int    `yaml:"priority,omitempty"`
+	// Follow names a host whose public IPv4 becomes Target at apply time,
+	// for apexes that cannot be a CNAME to a dynamic address.
+	Follow string `yaml:"follow,omitempty"`
+	// Unresolved marks a Follow record whose address could not be trusted
+	// this run; the syncer leaves the live record untouched.
+	Unresolved bool `yaml:"-"`
 }
 
 type OVHRecord struct {
