@@ -10,7 +10,9 @@ type DNSRecord struct {
 	Type     string `yaml:"type"`
 	Target   string `yaml:"target"`
 	TTL      int    `yaml:"ttl,omitempty"`
-	Priority int    `yaml:"priority,omitempty"`
+	// Priority is parsed only to be refused: OVH records have no such field,
+	// MX and SRV carry it at the start of Target ("10 mail.example.com.").
+	Priority int `yaml:"priority,omitempty"`
 	// Follow names a host whose public IPv4 becomes Target at apply time,
 	// for apexes that cannot be a CNAME to a dynamic address.
 	Follow string `yaml:"follow,omitempty"`
@@ -29,21 +31,20 @@ type OVHRecord struct {
 	FieldType string `json:"fieldType"`
 	Target   string `json:"target"`
 	TTL      int    `json:"ttl"`
-	Priority *int   `json:"priority,omitempty"`
 }
 
+// The bodies follow OVH's domain.zone.RecordCreate and domain.zone.Record
+// schemas, which have no priority field.
 type OVHRecordCreate struct {
 	SubDomain string `json:"subDomain"`
 	FieldType string `json:"fieldType"`
 	Target   string `json:"target"`
 	TTL      int    `json:"ttl"`
-	Priority *int   `json:"priority,omitempty"`
 }
 
 type OVHRecordUpdate struct {
 	Target   string `json:"target"`
 	TTL      int    `json:"ttl"`
-	Priority *int   `json:"priority,omitempty"`
 }
 
 type OVHCredentials struct {

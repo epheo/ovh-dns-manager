@@ -125,6 +125,10 @@ func ValidateDNSRecord(record *DNSRecord) error {
 		return fmt.Errorf("record type is required")
 	}
 
+	if record.Priority != 0 {
+		return fmt.Errorf("priority is not an OVH record field: put it in the target, e.g. \"10 mail.example.com.\"")
+	}
+
 	if record.External {
 		if record.Target != "" || record.Follow != "" {
 			return fmt.Errorf("external records take no target or follow")
@@ -144,14 +148,7 @@ func ValidateDNSRecord(record *DNSRecord) error {
 	}
 
 	switch record.Type {
-	case "A", "AAAA", "CNAME", "TXT", "NS", "SPF", "CAA", "PTR":
-		// These types don't require priority
-		if record.Priority != 0 {
-			return fmt.Errorf("record type %s should not have priority set", record.Type)
-		}
-	case "MX", "SRV":
-		// These types require priority (0 is valid for MX)
-		// Priority validation is implicit - any int value is valid
+	case "A", "AAAA", "CNAME", "TXT", "NS", "SPF", "CAA", "PTR", "MX", "SRV":
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)
 	}

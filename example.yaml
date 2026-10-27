@@ -10,8 +10,7 @@ records:
     ttl: 3600
   - name: mail
     type: MX
-    target: mail.example.com.
-    priority: 10
+    target: 10 mail.example.com.   # OVH keeps the priority in the target
     ttl: 3600
   - name: _dmarc
     type: TXT

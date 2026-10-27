@@ -68,8 +68,7 @@ records:
     ttl: 3600
   - name: mail
     type: MX
-    target: mail.example.com.
-    priority: 10
+    target: 10 mail.example.com.   # OVH keeps the priority in the target
     ttl: 3600
   - name: _dmarc
     type: TXT
@@ -189,10 +188,10 @@ podman run --rm -v $(pwd):/data:Z ovh-dns-manager [commands...]
 - **A** - IPv4 address
 - **AAAA** - IPv6 address  
 - **CNAME** - Canonical name
-- **MX** - Mail exchanger (priority 0+ allowed)
+- **MX** - Mail exchanger, priority first in the target: `10 mail.example.com.`
 - **TXT** - Text record
 - **NS** - Name server
-- **SRV** - Service record (requires priority)
+- **SRV** - Service record, priority, weight and port in the target: `10 5 443 host.example.com.`
 - **SPF** - Sender Policy Framework
 - **CAA** - Certificate Authority Authorization
 - **PTR** - Pointer record
