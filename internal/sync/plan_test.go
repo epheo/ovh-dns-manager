@@ -85,3 +85,22 @@ func TestPlanTTLChangeUpdates(t *testing.T) {
 		t.Fatalf("plan = %+v", p)
 	}
 }
+
+func TestPlanLeavesACMEChallenges(t *testing.T) {
+	p := Plan(nil, []config.OVHRecord{
+		live(1, "_acme-challenge", "TXT", "token-apex", 0),
+		live(2, "_acme-challenge.home", "TXT", "token-home", 0),
+		live(3, "_acme-challenge.www", "CNAME", "www.acme.example.net.", 0),
+		live(4, "_acme-challenger", "TXT", "unrelated", 0),
+	})
+	if len(p.Skipped) != 2 {
+		t.Fatalf("skipped = %+v", p.Skipped)
+	}
+	deleted := map[int64]bool{}
+	for _, d := range p.Deletes {
+		deleted[d.ID] = true
+	}
+	if deleted[1] || deleted[2] || !deleted[3] || !deleted[4] {
+		t.Fatalf("deletes = %+v: only the TXT challenges belong to the ACME client", p.Deletes)
+	}
+}

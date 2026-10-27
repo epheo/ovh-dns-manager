@@ -2,6 +2,7 @@ package sync
 
 import (
 	"sort"
+	"strings"
 
 	"ovh-dns-manager/internal/config"
 	"ovh-dns-manager/internal/ovh"
@@ -51,6 +52,10 @@ func Plan(desired []config.DNSRecord, current []config.OVHRecord) ZonePlan {
 
 	for _, k := range order {
 		ds, cs := want[k], have[k]
+		if acmeChallenge(k) {
+			plan.Skipped = append(plan.Skipped, Skip{Key: k, Reason: "ACME challenge, owned by the ACME client"})
+			continue
+		}
 		if reason := skipReason(ds); reason != "" {
 			plan.Skipped = append(plan.Skipped, Skip{Key: k, Reason: reason})
 			continue
@@ -58,6 +63,14 @@ func Plan(desired []config.DNSRecord, current []config.OVHRecord) ZonePlan {
 		planSet(&plan, dedupe(ds), cs)
 	}
 	return plan
+}
+
+// acmeChallenge reports a DNS-01 challenge set (RFC 8555). A client such as
+// cert-manager adds it for the minutes an order is open; deleting it as an
+// unlisted record fails the order with NXDOMAIN.
+func acmeChallenge(key string) bool {
+	name, typ, _ := strings.Cut(key, ":")
+	return typ == "TXT" && (name == "_acme-challenge" || strings.HasPrefix(name, "_acme-challenge."))
 }
 
 func skipReason(ds []config.DNSRecord) string {

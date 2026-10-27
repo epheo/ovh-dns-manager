@@ -111,14 +111,15 @@ func (r *SyncResult) HasErrors() bool {
 }
 
 func (r *SyncResult) PrintSummary() {
-	if !r.HasChanges() {
+	if r.HasChanges() {
+		log.Printf("Summary: %d created, %d updated, %d deleted",
+			len(r.Created), len(r.Updated), len(r.Deleted))
+	} else {
 		log.Println("No changes needed")
-		return
 	}
 
-	log.Printf("Summary: %d created, %d updated, %d deleted",
-		len(r.Created), len(r.Updated), len(r.Deleted))
-
+	// Failed operations are not changes: a run where every one failed still
+	// has to say why.
 	if r.HasErrors() {
 		log.Printf("Errors: %d", len(r.Errors))
 		for _, err := range r.Errors {

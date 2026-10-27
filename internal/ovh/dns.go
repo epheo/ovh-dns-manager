@@ -127,54 +127,34 @@ func (c *Client) RefreshZone(zoneName string) error {
 }
 
 func ConvertOVHRecordToDNSRecord(ovhRecord *config.OVHRecord) *config.DNSRecord {
-	record := &config.DNSRecord{
+	return &config.DNSRecord{
 		Name:   ovhRecord.SubDomain,
 		Type:   ovhRecord.FieldType,
 		Target: ovhRecord.Target,
 		TTL:    ovhRecord.TTL,
 	}
-
-	if ovhRecord.Priority != nil {
-		record.Priority = *ovhRecord.Priority
-	}
-
-	return record
 }
 
-// setRecordDefaults applies default TTL and priority handling
-func setRecordDefaults(ttl int, priority int, recordType string) (int, *int) {
+func defaultTTL(ttl int) int {
 	if ttl == 0 {
-		ttl = config.DefaultTTL
+		return config.DefaultTTL
 	}
-	
-	var priorityPtr *int
-	// Only include priority for record types that support it
-	if (recordType == "MX" || recordType == "SRV") && priority >= 0 {
-		priorityPtr = &priority
-	}
-	
-	return ttl, priorityPtr
+	return ttl
 }
 
 func ConvertDNSRecordToOVHCreate(dnsRecord *config.DNSRecord) *config.OVHRecordCreate {
-	ttl, priority := setRecordDefaults(dnsRecord.TTL, dnsRecord.Priority, dnsRecord.Type)
-	
 	return &config.OVHRecordCreate{
 		SubDomain: dnsRecord.Name,
 		FieldType: dnsRecord.Type,
 		Target:    dnsRecord.Target,
-		TTL:       ttl,
-		Priority:  priority,
+		TTL:       defaultTTL(dnsRecord.TTL),
 	}
 }
 
 func ConvertDNSRecordToOVHUpdate(dnsRecord *config.DNSRecord) *config.OVHRecordUpdate {
-	ttl, priority := setRecordDefaults(dnsRecord.TTL, dnsRecord.Priority, dnsRecord.Type)
-	
 	return &config.OVHRecordUpdate{
-		Target:   dnsRecord.Target,
-		TTL:      ttl,
-		Priority: priority,
+		Target: dnsRecord.Target,
+		TTL:    defaultTTL(dnsRecord.TTL),
 	}
 }
 
@@ -190,8 +170,7 @@ func RecordsEqual(desired, current *config.DNSRecord) bool {
 	return desired.Name == current.Name &&
 		desired.Type == current.Type &&
 		desired.Target == current.Target &&
-		ttlOK &&
-		desired.Priority == current.Priority
+		ttlOK
 }
 
 func RecordKey(record *config.DNSRecord) string {

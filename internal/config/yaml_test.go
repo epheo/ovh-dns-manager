@@ -21,3 +21,12 @@ func TestValidateFollowAndExternal(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatePriorityBelongsInTarget(t *testing.T) {
+	if err := ValidateDNSRecord(&DNSRecord{Type: "MX", Target: "10 mail.example.com."}); err != nil {
+		t.Fatalf("MX with its priority in the target: %v", err)
+	}
+	if err := ValidateDNSRecord(&DNSRecord{Type: "MX", Target: "mail.example.com.", Priority: 10}); err == nil {
+		t.Fatal("a priority field must be refused: OVH records have none")
+	}
+}
