@@ -105,6 +105,9 @@ A record updated by something else, such as a router's DynHost, must not be rese
 
 Leaving it out of the file is not the same: apply deletes records the file does not list.
 
+ACME DNS-01 challenges (`_acme-challenge` and `_acme-challenge.<name>` TXT) are always left alone:
+a client such as cert-manager writes them for the minutes an order is open, and deleting them fails the order.
+
 ## Usage
 
 ### Export existing DNS zone
